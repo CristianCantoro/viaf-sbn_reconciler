@@ -107,7 +107,7 @@ if __name__ == '__main__':
     outwikifile = open(OUTWIKIFILE, 'a+')
     wikiwriter = UnicodeWriter(outwikifile)
 
-    wikipages_to_get = set(wikipages_with_authority_control).intersection(set(wikipedia.keys()))
+    wikipages_to_get = set(wikipages_with_authority_control) - set(wikipedia.keys())
 
     logger.debug('no. of pages in it.wiki with authority control, still to get: %d'
                  % len(wikipages_to_get))
