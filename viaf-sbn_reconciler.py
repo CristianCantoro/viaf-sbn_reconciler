@@ -14,6 +14,9 @@ from unicode_csv import UnicodeWriter
 INFILESBN = '../6600SBN.csv'
 INFILEVIAF = '../VIAF-ICCU.csv'
 
+WIKIPAGESOUTFILE = 'itwiki-pages-with-authority-control.csv'
+WIKIPAGESINFILE = 'itwiki-pages-with-authority-control.csv'
+
 OUTWIKIFILE = 'itwiki-viaf-sbn.csv'
 INWIKIFILE = 'itwiki-viaf-sbn.csv'
 
@@ -81,11 +84,22 @@ if __name__ == '__main__':
 
     infileviaf.close()
 
-    wikipages_with_authority_control = wtp.pages_with_template(
-        'Template:Controllo_di_autorità', lang='it')
+    wikipages_infile = open(WIKIPAGESINFILE, 'r+')
+    wikipages_with_authority_control = [line.strip() for line in wikipages_infile.readlines()]
 
-    logger.debug('no. of pages in it.wiki with authority control: %d'
-                 % len(wikipages_with_authority_control))
+    # TODO
+    # add a command line argument to switch this.
+    write_wikipages = False
+    if write_wikipages:
+        wikipages_with_authority_control = wtp.pages_with_template(
+            'Template:Controllo_di_autorità', lang='it')
+
+        logger.debug('no. of pages in it.wiki with authority control: %d'
+                     % len(wikipages_with_authority_control))
+
+        wikipagesoutfile = open(WIKIPAGESOUTFILE, 'w+')
+        for page in wikipages_with_authority_control:
+            wikipagesoutfile.write('{}\n'.format(page.encode('utf-8')))
 
     wikipedia = dict()
     sbn2wiki = dict()
@@ -95,25 +109,36 @@ if __name__ == '__main__':
     wiki_reader = reader(infilewiki)
 
     for line in wiki_reader:
-        page = line[0]
-        viaf_code = line[1]
-        sbn_code = line[2]
+        page = None
+        viaf_code = None
+        sbn_code = None
+        try:
+            page = line[0]
+            viaf_code = line[1]
+            sbn_code = line[2]
+        except:
+            pass
 
-        wikipedia[page] = {'viaf': viaf_code,
-                           'sbn': sbn_code}
-        sbn2wiki[sbn_code] = page
-        viaf2wiki[viaf_code] = page
+        if page:
+            wikipedia[page] = {'viaf': viaf_code,
+                               'sbn': sbn_code}
+        if viaf_code:
+            viaf2wiki[viaf_code] = page
+
+        if sbn_code:
+            sbn2wiki[sbn_code] = page
 
     outwikifile = open(OUTWIKIFILE, 'a+')
     wikiwriter = UnicodeWriter(outwikifile)
 
     wikipages_to_get = set(wikipages_with_authority_control) - set(wikipedia.keys())
 
-    logger.debug('no. of pages in it.wiki with authority control, still to get: %d'
-                 % len(wikipages_to_get))
-
-    # logger.debug(wikipedia)
-    # logger.debug(wikipages_to_get)
+    logger.debug('Wikipages with authority control: {no}'.format(
+        no=len(set(wikipages_with_authority_control))))
+    logger.debug('no. of keys already collected: {no}'.format(
+        no=len(set(wikipedia.keys()))))
+    logger.debug('no. of pages in it.wiki with authority control, still to get: {no}'.format(
+        no=len(wikipages_to_get)))
 
     count = 0
     for page in wikipages_to_get:
@@ -122,7 +147,13 @@ if __name__ == '__main__':
 
         viaf_code = None
         sbn_code = None
-        templates = wtp.data_from_templates(page, lang='it')
+        templates = []
+
+        try:
+            templates = wtp.data_from_templates(page, lang='it')
+        except:
+            pass
+
         ac_template = [t for t in templates
                        if normalize_string(t['name']) == 'controllo_di_autorità']
         ac_data = ac_template[0]['data'] if ac_template else {}
@@ -135,30 +166,40 @@ if __name__ == '__main__':
             logger.debug('SBN from template')
             sbn_code = ac_data['SBN']
 
-        wikipage = pywikibot.Page(site, page)
-        item = pywikibot.ItemPage.fromPage(wikipage)
-        item.get()
-        if item.claims:
-            if 'p214' in item.claims:  # VIAF identifier
-                viaf_code_wikidata = item.claims['p214'][0].getTarget()
-                logger.debug('page: %s, viaf_code_wikidata: %s' % (page, viaf_code_wikidata))
-                if viaf_code is None:
-                    viaf_code = viaf_code_wikidata
-                else:
-                    if viaf_code != viaf_code_wikidata:
-                        logger.error("VIAF codes in Wikipedia and Wikidata don't match")
+        try:
+            wikipage = pywikibot.Page(site, page)
+        except:
+            pass
 
-            if 'p396' in item.claims:  # SBN identifier
-                sbn_code_wikidata = item.claims['p396'][0].getTarget()
-                logger.debug('page: %s, sbn_code_wikidata: %s' % (page, viaf_code_wikidata))
-                if sbn_code is None:
-                    sbn_code = sbn_code_wikidata
-                else:
-                    if sbn_code != sbn_code_wikidata:
-                        logger.error("SBN codes in Wikipedia and Wikidata don't match")
+        item = None
+        skip_item = False
+        try:
+            item = pywikibot.ItemPage.fromPage(wikipage)
+            item.get()
+            if item.claims:
+                if 'p214' in item.claims:  # VIAF identifier
+                    viaf_code_wikidata = item.claims['p214'][0].getTarget()
+                    logger.debug('page: %s, viaf_code_wikidata: %s' % (page, viaf_code_wikidata))
+                    if viaf_code is None:
+                        viaf_code = viaf_code_wikidata
+                    else:
+                        if viaf_code != viaf_code_wikidata:
+                            logger.error("VIAF codes in Wikipedia and Wikidata don't match")
 
-        wikipedia[page] = {'viaf': viaf_code,
-                           'sbn': sbn_code}
+                if 'p396' in item.claims:  # SBN identifier
+                    sbn_code_wikidata = item.claims['p396'][0].getTarget()
+                    logger.debug('page: %s, sbn_code_wikidata: %s' % (page, viaf_code_wikidata))
+                    if sbn_code is None:
+                        sbn_code = sbn_code_wikidata
+                    else:
+                        if sbn_code != sbn_code_wikidata:
+                            logger.error("SBN codes in Wikipedia and Wikidata don't match")
+        except:
+            pass
+
+        if page:
+            wikipedia[page] = {'viaf': viaf_code,
+                               'sbn': sbn_code}
 
         if viaf_code is not None:
             viaf2wiki[viaf_code] = page
@@ -166,6 +207,7 @@ if __name__ == '__main__':
         if sbn_code is not None:
             sbn2wiki[sbn_code] = page
 
+        page = page or ''
         viaf_code = viaf_code or ''
         sbn_code = sbn_code or ''
 
