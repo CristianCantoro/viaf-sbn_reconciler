@@ -10,6 +10,7 @@ from csv import reader, writer
 import wikipedia_template_parser as wtp
 from unicode_csv import UnicodeWriter
 
+from item import SbnItem, ViafItem
 # globals
 INFILESBN = '../6600SBN.csv'
 INFILEVIAF = '../VIAF-ICCU.csv'
@@ -27,7 +28,6 @@ VIAFPERMURL = 'http://viaf.org/viaf/{viaf_code}'
 site = pywikibot.getSite('it', 'wikipedia')
 repo = site.data_repository()
 
-# logging
 # logging
 LOGFORMAT_STDOUT = {logging.DEBUG: '%(module)s:%(funcName)s:%(lineno)s - %(levelname)-8s: %(message)s',
                     logging.INFO: '%(levelname)-8s: %(message)s',
@@ -50,7 +50,7 @@ console.setFormatter(formatter)
 
 rootlogger.addHandler(console)
 
-logger = logging.getLogger('viaf-iccu')
+logger = logging.getLogger('viaf-sbn')
 logger.setLevel(logging.DEBUG)
 
 
@@ -216,9 +216,6 @@ if __name__ == '__main__':
 
     outwikifile.close()
 
-    import pdb
-    pdb.set_trace()
-
     viaf_sbn_codes = set(sbn2viaf.keys())
     sbn_codes = set(sbn.keys())
 
@@ -231,11 +228,32 @@ if __name__ == '__main__':
     viaf_code = None
     sbn_code = None
     for sbn_code in viaf_sbn_intersection:
-        viaf_code = sbn2viaf[code]
+        wiki_page = None
+        try:
+            viaf_code = sbn2viaf[sbn_code]
+        except:
+            continue
+
+        wiki_page = sbn2wiki.get(sbn_code) or viaf2wiki.get(viaf_code)
+
+        logger.debug(wiki_page)
+        if wiki_page:
+            import pdb
+            pdb.set_trace()
+
         print 'SBN: ', sbn_code, ' VIAF: ', viaf_code
         sbnurl = SBNPERMURL.format(sbn_code=sbn_code.replace('\\', '/'))
         viafurl = VIAFPERMURL.format(viaf_code=viaf_code)
         req_sbn = requests.get(sbnurl)
         req_viaf = requests.get(viafurl)
+
+        if req_sbn.ok:
+            sbn_item = SbnItem(sbn_code, req_sbn.text, req_sbn.url)
+
+        if req_viaf.ok:
+            viaf_item = ViafItem(viaf_code, req_viaf.text, req_viaf.url)
+
+        import pdb
+        pdb.set_trace()
 
         time.sleep(1)
